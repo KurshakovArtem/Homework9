@@ -22,7 +22,6 @@ object ChatService {
         chats += chat.copy(id = chats.lastIndex + 2)
         chats.last().messages.forEachIndexed { index, message -> message.id = index + 1 }
         return chats.last().id
-
     }
 
 
@@ -31,11 +30,9 @@ object ChatService {
     }
 
     fun deleteChat(id: Int): Boolean {
-        if (chats.any { it.id == id && !it.isDelete }) {
-            chats[id - 1].isDelete = true
-            return true
-        }
-        throw IdOutOfBoundsException()
+        val chat = chats.find { it.id == id && !it.isDelete } ?: throw IdOutOfBoundsException()
+        chat.isDelete = true
+        return true
     }
 
     fun addMessage(companionId: Int, message: Message): Boolean {
@@ -53,7 +50,7 @@ object ChatService {
             if (compareAuthorId(companionId) || chats.any { it.companionId == companionId }) {
                 chats.forEachIndexed { index, chat ->
                     if ((chat.messages.any { companionId == it.authorId }
-                                || chat.companionId == companionId )
+                                || chat.companionId == companionId)
                         && !chats[index].isDelete
                     ) {
                         chats[index].messages += message.copy(id = chats[index].messages.lastIndex + 2, isRead = true)
@@ -94,11 +91,11 @@ object ChatService {
     }
 
     fun deleteMessage(chatId: Int, messageId: Int): Boolean {
-        if (chats.any { chatId == it.id } && chats[chatId - 1].messages.any { messageId == it.id }) {
-            chats[chatId - 1].messages[messageId - 1].isDelete = true
-            return true
-        }
-        throw IdOutOfBoundsException()
+        val message = chats.find { it.id == chatId }
+            .let { it?.messages ?: throw IdOutOfBoundsException() }
+            .find { it.id == messageId } ?: throw IdOutOfBoundsException()
+        message.isDelete = true
+        return true
     }
 
     fun editMessage(companionId: Int, message: Message): Boolean {
@@ -125,37 +122,26 @@ object ChatService {
         throw IncorrectParametersMessageException()
     }
 
-    fun getUnreadChatsCount(): Int {
-        var count = 0
-        chats.forEach { chat -> if (chat.messages.any { !it.isRead }) count++ }
-        return count
-    }
+    fun getUnreadChatsCount() = chats.count { it.messages.any { message -> !message.isRead } }
 
-    fun getMessageByChatId(chatId: Int): String {
-        if (chatId !in 1..chats.size) {
-            throw IdOutOfBoundsException()
-        }
-        var strCount = ""
-        chats[chatId - 1].messages.forEach { if (!it.isDelete) strCount += it.message + " \n" }
-        if (strCount == "") {
-            return "нет сообщений"
-        }
-        return strCount
-    }
+    fun getMessageByChatId(chatId: Int) = chats
+        .find { it.id == chatId }
+        .let { it?.messages ?: throw IdOutOfBoundsException() }
+        .asSequence()
+        .filter { !it.isDelete }
+        .joinToString(separator = "") { it.message + " \n" }
+        .ifEmpty { "нет сообщений" }
 
     // возвращает список последних сообщений (количество сообщений count) по ID автора
-    fun getMessageByCountAndAuthorId(count: Int, authorId: Int): MutableList<Message> {
-        if (!chats.any { it.companionId == authorId }) {
-            throw AuthorIdIsAbsentException()
-        }
-        val chatIndex = chats.indexOfFirst { it.companionId == authorId }
-        val messageList: MutableList<Message> = mutableListOf()
-        chats[chatIndex].messages.reversed().forEachIndexed { index, message ->
-            if (messageList.size <= count) messageList += message
-            chats[chatIndex].messages[chats[chatIndex].messages.size - index - 1].isRead = true
-        }
-        return messageList
-    }
+    fun getMessageByCountAndAuthorId(count: Int, authorId: Int) = chats
+        .find { it.messages.any { message -> message.id == authorId } }
+        .let { it?.messages ?: throw AuthorIdIsAbsentException() }
+        .reversed()
+        .asSequence()
+        .filter { !it.isDelete }
+        .take(count)
+        .onEach { it.isRead = true }
+        .toMutableList()
 
     fun clear() {
         chats = mutableListOf()
